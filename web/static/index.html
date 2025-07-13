@@ -1,0 +1,27 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>锚节点可视化控制台</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<h1>锚节点可视化控制台</h1>
+
+<div class="chart-box">
+    <h2>节点得分（红色为当前锚节点）</h2>
+    <canvas id="scoreChart"></canvas>
+</div>
+
+<div class="chart-box">
+    <h2>贡献值分布</h2>
+    <canvas id="contribChart"></canvas>
+</div>
+
+<footer>
+    <p>每 5 秒自动刷新图表，展示最新选举状态和贡献变化</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

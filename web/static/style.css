@@ -1,0 +1,27 @@
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f5f7fa;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+h1 {
+    margin: 20px;
+    color: #333;
+}
+.chart-box {
+    margin: 30px auto;
+    max-width: 900px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.1);
+}
+canvas {
+    margin: auto;
+}
+footer {
+    margin: 40px 0;
+    color: #666;
+    font-size: 14px;
+}
