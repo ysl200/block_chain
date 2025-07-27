@@ -4,7 +4,7 @@ import (
 	"blockchain/global"
 	"blockchain/hash"
 	"blockchain/node"
-	"blockchain/raft"
+	"blockchain/service"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -30,16 +30,16 @@ func (n *NodeController) HandleAddNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	node := node.NewNode(id)
-	node.CalculateScore(node)
+	no := node.NewNode(id)
+	no.CalculateScore(no)
 
 	mu.Lock()
-	global.NodesMap[id] = node
-	nodes = append(nodes, node)
+	global.NodesMap[id] = no
+	nodes = append(nodes, no)
 	hash.AddNode(id)
 	mu.Unlock()
 
-	rf := raft.NewRaft()
+	rf := service.NewRaft()
 	rf.ElectAnchor(nodes)
 }
 
@@ -52,8 +52,8 @@ func (n *NodeController) HandleListNodes(w http.ResponseWriter, r *http.Request)
 func (n *NodeController) AddContribution(nodeID string, delta float64) {
 	mu.Lock()
 	defer mu.Unlock()
-	if node, ok := global.NodesMap[nodeID]; ok {
-		node.Contribution += delta
-		node.CalculateScore(node)
+	if n, ok := global.NodesMap[nodeID]; ok {
+		n.Contribution += delta
+		n.CalculateScore(n)
 	}
 }

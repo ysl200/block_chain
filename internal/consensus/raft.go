@@ -1,8 +1,10 @@
-package raft
+package service
 
 import (
+	bc "blockchain/block_chain"
+	"blockchain/hash"
 	"blockchain/node"
-	"blockchain/service"
+	"log"
 	"sort"
 	"time"
 )
@@ -37,17 +39,36 @@ func (r *Raft) ElectAnchor(nodes []*node.Node) *node.Node {
 func (r *Raft) StartAnchorListener(nodeID string) {
 	go func() {
 		for {
-			if !service.IsCurrentNodeAnchor(nodeID) {
+			if !IsCurrentNodeAnchor(nodeID) {
 				time.Sleep(30 * time.Second) // 每30秒检查一次
 				continue
 			}
 
-			//block := blockpoll.GetNewBlock()
-			//if block == nil {
-			//	target := hash.GetNode()
-			//	storage.StoreBlock(target, block)
-			//
-			//}
+			blocks := bc.Blockpool
+			if len(blocks) == 0 {
+				continue
+			}
+			for _, b := range blocks {
+				n, _ := hash.GetNode(b.Hash)
+				StoreBlock(n, &b)
+				r.AddContribution(nodeID, 10)
+
+				log.Printf("[锚节点] 区块 %d 分发至节点 %s\n", b.Index, nodeID)
+			}
+			time.Sleep(1 * time.Second)
 		}
 	}()
+}
+
+func (r *Raft) AddContribution(nodeID string, contribution float64) {
+	if nodeID == "" || contribution <= 0 {
+		return
+	}
+
+	n := GetNodeByID(nodeID)
+	if n == nil {
+		return
+	}
+
+	n.Contribution += contribution
 }
