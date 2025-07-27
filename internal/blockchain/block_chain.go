@@ -144,7 +144,7 @@ func (bc *Blockchain) ProofOfWorkParallel(lastBlock Block, workerCount int) (Blo
 			block := Block{
 				Index:        lastBlock.Index + 1,
 				Timestamp:    time.Now().Unix(),
-				Transactions: append([]Transaction(nil), bc.PendingTx...),
+				Transactions: append([]Transaction(nil), bc.PendingTx[:3]...),
 				PrevHash:     lastBlock.Hash,
 				Nonce:        rand.Intn(10000), // 随机初始Nonce值
 				Miner:        bc.GetRandomMinerByContribution(),
@@ -201,7 +201,7 @@ func (bc *Blockchain) MineBlock() Block {
 
 	newBlock.Hash = hash
 	bc.Chain = append(bc.Chain, newBlock)
-	bc.PendingTx = []Transaction{}
+	bc.PendingTx = bc.PendingTx[3:] // 移除已打包的交易
 	bc.Contributions[newBlock.Miner]++
 
 	AddBlock(newBlock)
@@ -226,23 +226,27 @@ func (bc *Blockchain) PrintBlockchain() {
 }
 
 func (bc *Blockchain) StartTransactionGenerator(stop chan struct{}) {
-	go func() {
+	i := 0
+	go func(i int) {
 		for {
+			i++
 			select {
 			case <-stop:
 				return
 			default:
 				tx := bc.GenerateRandomTransaction()
 				bc.AddTransaction(tx)
-				fmt.Printf("[交易生成] %s -> %s %.2f (%s)\n",
-					tx.Sender, tx.Recipient, tx.Amount, tx.Description)
-				time.Sleep(config.TxGenInterval)
+				fmt.Printf("[第%d交易生成] %s -> %s %.2f (%s)\n",
+					i, tx.Sender, tx.Recipient, tx.Amount, tx.Description)
+				//time.Sleep(config.TxGenInterval)
+				time.Sleep(100 * time.Millisecond) // 减少交易生成间隔，便于测试
 			}
 		}
-	}()
+	}(i)
 }
 
 func (bc *Blockchain) StartMiner(stop <-chan struct{}) {
+	fmt.Println("[矿工监听] 开始监听交易池...")
 	go func() {
 		for {
 			select {
@@ -257,7 +261,8 @@ func (bc *Blockchain) StartMiner(stop <-chan struct{}) {
 						fmt.Printf("[挖矿完成] 区块 %d 被 %s 挖出，耗时 %v\n\n", block.Index, block.Miner, time.Since(start))
 					}
 				}
-				time.Sleep(config.MinerCheckDelay)
+				//time.Sleep(config.MinerCheckDelay)
+				time.Sleep(1 * time.Second) // 避免过于频繁的挖矿检查
 			}
 		}
 	}()

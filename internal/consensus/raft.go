@@ -117,6 +117,9 @@ func (r *Raft) distributeBlock(block bc.Block, availableNodes []*network.Node, a
 	// 存储区块到目标节点
 	storage.StoreBlock(targetNodeID, &block)
 
+	anchorNode := service.GetNodeByID(anchorNodeID)
+	anchorNode.NodeBlockMap[targetNodeID] = append(anchorNode.NodeBlockMap[targetNodeID], block.Hash)
+
 	// 增加锚节点的贡献值
 	service.AddContribution(anchorNodeID, 10.0)
 

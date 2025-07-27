@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
@@ -8,31 +9,77 @@ import (
 )
 
 type Node struct {
-	ID           string  // Node ID
-	CPU          float64 // CPU in percentage (0-100)
-	Memory       float64 // Memory in GB
-	Disk         float64 // Disk in GB
-	Bandwidth    float64 // Bandwidth in Mbps
-	Contribution float64 // Contribution score
-	Score        float64 // Calculated score
-	IsAnchor     bool    // Is this node the anchor?
-	Address      string  // Node address (optional, for network communication)
+	ID           string
+	CPU          float64
+	Memory       float64
+	Disk         float64
+	Bandwidth    float64
+	Contribution float64
+	Score        float64
+	IsAnchor     bool
+	Address      string
+	NodeBlockMap map[string][]string
+	LastHealth   HealthStatus // 新增健康状态记录
 }
 
-// NewNode creates a new Node instance with performance metrics
+// 更新NewNode函数
 func NewNode(id string) *Node {
 	cpuUsage, memFree, diskFree, bandwidth := getPerformance()
 
-	return &Node{
+	node := &Node{
 		ID:           id,
 		CPU:          cpuUsage,
 		Memory:       memFree,
 		Disk:         diskFree,
 		Bandwidth:    bandwidth,
-		Contribution: 0.0, // Initial contribution is zero
-		Score:        0.0, // Initial score is zero
+		Contribution: 0.0,
+		Score:        0.0,
 		IsAnchor:     false,
-		Address:      "", // Optional address field, can be set later
+		Address:      "",
+		NodeBlockMap: make(map[string][]string),
+	}
+
+	// 初始化健康状态
+	node.LastHealth = node.CheckHealth()
+
+	return node
+}
+
+// CalculateScore 更新CalculateScore时考虑健康状态
+func (n *Node) CalculateScore(node *Node) {
+	alpha, beta, gamma, delta := 0.3, 0.3, 0.2, 0.2
+	theta, epsilon := 0.6, 0.4
+
+	// 获取当前健康评分(0-100)并归一化到0-1
+	healthScore := node.CheckHealth().Score / 100
+
+	n.Score = theta*(alpha*node.CPU+beta*node.Disk+gamma*node.Memory+delta*node.Bandwidth) +
+		epsilon*(node.Contribution*healthScore)
+}
+
+// StoreBlock 模拟存储区块并扣减磁盘空间
+func (n *Node) StoreBlock(blockID string, blockSizeGB float64) error {
+	// 检查磁盘空间是否足够
+	if blockSizeGB > n.Disk {
+		return fmt.Errorf("磁盘空间不足，需要 %.2fGB，可用 %.2fGB", blockSizeGB, n.Disk)
+	}
+
+	// 扣减磁盘空间
+	n.Disk -= blockSizeGB
+
+	// 更新区块映射
+	if _, exists := n.NodeBlockMap[blockID]; !exists {
+		n.NodeBlockMap[blockID] = []string{}
+	}
+
+	return nil
+}
+
+// RemoveBlock 模拟删除区块并释放磁盘空间
+func (n *Node) RemoveBlock(blockID string, blockSizeGB float64) {
+	if _, exists := n.NodeBlockMap[blockID]; exists {
+		delete(n.NodeBlockMap, blockID)
+		n.Disk += blockSizeGB
 	}
 }
 
@@ -48,18 +95,4 @@ func getPerformance() (float64, float64, float64, float64) {
 	bandwidth := float64(netStat[0].BytesRecv+netStat[0].BytesSent) / 1e6
 
 	return cpuUsage, memFree, diskFree, bandwidth
-}
-
-func (n *Node) CalculateScore(node *Node) {
-	alpha, beta, gamma, delta := 0.3, 0.3, 0.2, 0.2
-	theta, epsilon := 0.6, 0.4
-
-	n.Score = theta*(alpha*node.CPU+beta*node.Disk+gamma*node.Memory+delta*node.Bandwidth) + epsilon*node.Contribution
-}
-
-func (n *Node) GetNodeByID(id string) *Node {
-	if n.ID == id {
-		return n
-	}
-	return nil
 }

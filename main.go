@@ -22,19 +22,30 @@ func main() {
 	// 创建区块链
 	blockchain := bc.NewBlockchain()
 
-	stop := make(chan struct{})
+	stopTG := make(chan struct{})
+	stopM := make(chan struct{})
 
 	// 启动交易生成器和矿工监听器
-	blockchain.StartTransactionGenerator(stop)
-	blockchain.StartMiner(stop)
-
-	// 创建初始节点并启动锚节点监听器
-	//initializeNodes()
+	blockchain.StartTransactionGenerator(stopTG)
+	blockchain.StartMiner(stopM)
 
 	// 模拟运行一段时间
-	time.Sleep(60 * time.Second)
-	// 停止交易生成器和矿工
-	close(stop)
+	time.Sleep(3 * time.Second)
+	// 停止交易生成器
+	close(stopTG)
+	log.Println("[交易生成器] 停止交易生成")
+
+	for len(blockchain.PendingTx) >= 3 {
+		log.Printf("等待矿工处理剩余交易: %d 笔...\n", len(blockchain.PendingTx))
+		time.Sleep(2 * time.Second) // 每隔 2 秒检查一次
+	}
+
+	// 停止矿工监听器
+	close(stopM)
+	log.Println("[矿工监听器] 停止矿工监听")
+
+	// 创建初始节点并启动锚节点监听器
+	initializeNodes()
 
 	// 打印区块链信息
 	fmt.Println("\n区块链状态:")
@@ -47,6 +58,7 @@ func main() {
 	http.HandleFunc("/add", nodeController.HandleAddNode)
 	http.HandleFunc("/store", storage.HandleStoreData)
 	http.HandleFunc("/list", nodeController.HandleListNodes)
+	http.HandleFunc("/query", nodeController.HandleQueryNode)
 
 	web.StartWebServer()
 
@@ -79,4 +91,6 @@ func initializeNodes() {
 		log.Printf("[初始化] 锚节点 %s 已选举，开始监听区块池", anchor.ID)
 		rf.StartAnchorListener(anchor.ID)
 	}
+
+	global.AnchorNode = anchor
 }

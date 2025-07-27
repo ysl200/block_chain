@@ -6,6 +6,7 @@ import (
 	"blockchain/internal/hash"
 	"blockchain/internal/network"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 )
@@ -52,4 +53,29 @@ func (n *NodeController) HandleListNodes(w http.ResponseWriter, r *http.Request)
 	mu.Lock()
 	defer mu.Unlock()
 	json.NewEncoder(w).Encode(global.NodesMap)
+}
+
+func (n *NodeController) HandleQueryNode(w http.ResponseWriter, r *http.Request) {
+	blockHash := r.URL.Query().Get("block_hash")
+	if blockHash == "" {
+		http.Error(w, "block_hash is required", http.StatusBadRequest)
+		return
+	}
+	targetNodeID, _ := hash.GetNode(blockHash)
+	if targetNodeID == "" {
+		http.Error(w, "no node found for the given block hash", http.StatusNotFound)
+		return
+	}
+
+	rsp := map[string]interface{}{
+		"block_hash": blockHash,
+		"node_id":    targetNodeID,
+	}
+
+	// 5. 返回 JSON 响应
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(rsp); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
 }
