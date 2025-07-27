@@ -1,17 +1,17 @@
-package controller
+package handler
 
 import (
 	"blockchain/global"
-	"blockchain/hash"
-	"blockchain/node"
-	"blockchain/service"
+	"blockchain/internal/consensus"
+	"blockchain/internal/hash"
+	"blockchain/internal/network"
 	"encoding/json"
 	"net/http"
 	"sync"
 )
 
 var (
-	nodes []*node.Node
+	nodes []*network.Node
 	mu    sync.Mutex
 )
 
@@ -30,7 +30,7 @@ func (n *NodeController) HandleAddNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	no := node.NewNode(id)
+	no := network.NewNode(id)
 	no.CalculateScore(no)
 
 	mu.Lock()
@@ -39,21 +39,17 @@ func (n *NodeController) HandleAddNode(w http.ResponseWriter, r *http.Request) {
 	hash.AddNode(id)
 	mu.Unlock()
 
-	rf := service.NewRaft()
-	rf.ElectAnchor(nodes)
+	rf := consensus.NewRaft()
+	anchor := rf.ElectAnchor(nodes)
+
+	// 启动锚节点监听器
+	if anchor != nil {
+		rf.StartAnchorListener(anchor.ID)
+	}
 }
 
 func (n *NodeController) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 	json.NewEncoder(w).Encode(global.NodesMap)
-}
-
-func (n *NodeController) AddContribution(nodeID string, delta float64) {
-	mu.Lock()
-	defer mu.Unlock()
-	if n, ok := global.NodesMap[nodeID]; ok {
-		n.Contribution += delta
-		n.CalculateScore(n)
-	}
 }

@@ -1,9 +1,9 @@
-package service
+package storage
 
 import (
-	"blockchain/block_chain"
-	"blockchain/controller"
-	"blockchain/hash"
+	block_chain "blockchain/internal/blockchain"
+	"blockchain/internal/hash"
+	"blockchain/service"
 	"fmt"
 	"net/http"
 	"sync"
@@ -27,8 +27,7 @@ func HandleStoreData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodeController := controller.NodeController{}
-	nodeController.AddContribution(nodeID, 1.0)
+	service.AddContribution(nodeID, 1.0)
 	w.Write([]byte(fmt.Sprintf("Key %s stored on node %s\n", key, nodeID)))
 }
 

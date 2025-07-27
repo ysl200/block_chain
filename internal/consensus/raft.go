@@ -1,10 +1,13 @@
-package service
+package consensus
 
 import (
-	bc "blockchain/block_chain"
-	"blockchain/hash"
-	"blockchain/node"
+	bc "blockchain/internal/blockchain"
+	"blockchain/internal/hash"
+	"blockchain/internal/network"
+	"blockchain/internal/storage"
+	"blockchain/service"
 	"log"
+	"math/rand"
 	"sort"
 	"time"
 )
@@ -16,7 +19,7 @@ func NewRaft() *Raft {
 	return &Raft{}
 }
 
-func (r *Raft) ElectAnchor(nodes []*node.Node) *node.Node {
+func (r *Raft) ElectAnchor(nodes []*network.Node) *network.Node {
 	if len(nodes) == 0 {
 		return nil
 	}
@@ -36,28 +39,129 @@ func (r *Raft) ElectAnchor(nodes []*node.Node) *node.Node {
 	return anchor
 }
 
+// StartAnchorListener 启动锚节点监听器，监听区块池并分发区块
 func (r *Raft) StartAnchorListener(nodeID string) {
 	go func() {
+		log.Printf("[锚节点监听器] 节点 %s 开始监听区块池...", nodeID)
+
+		lastProcessedIndex := -1 // 记录最后处理的区块索引
+
 		for {
-			if !IsCurrentNodeAnchor(nodeID) {
-				time.Sleep(30 * time.Second) // 每30秒检查一次
+			if !service.IsCurrentNodeAnchor(nodeID) {
+				time.Sleep(30 * time.Second) // 每30秒检查一次锚节点状态
 				continue
 			}
 
-			blocks := bc.Blockpool
-			if len(blocks) == 0 {
+			// 获取所有可用节点
+			availableNodes := r.getAvailableNodes()
+			if len(availableNodes) == 0 {
+				log.Printf("[锚节点] 没有可用的节点进行区块分发")
+				time.Sleep(5 * time.Second)
 				continue
 			}
-			for _, b := range blocks {
-				n, _ := hash.GetNode(b.Hash)
-				StoreBlock(n, &b)
-				r.AddContribution(nodeID, 10)
 
-				log.Printf("[锚节点] 区块 %d 分发至节点 %s\n", b.Index, nodeID)
+			// 获取区块池中的新区块
+			newBlocks := r.getNewBlocks(lastProcessedIndex)
+			if len(newBlocks) == 0 {
+				time.Sleep(2 * time.Second)
+				continue
 			}
+
+			// 分发新区块
+			for _, block := range newBlocks {
+				r.distributeBlock(block, availableNodes, nodeID)
+				lastProcessedIndex = block.Index
+			}
+
 			time.Sleep(1 * time.Second)
 		}
 	}()
+}
+
+// getAvailableNodes 获取所有可用的节点
+func (r *Raft) getAvailableNodes() []*network.Node {
+	var availableNodes []*network.Node
+
+	for _, node := range service.GetAllNodes() {
+		if node != nil && node.Score > 0 {
+			availableNodes = append(availableNodes, node)
+		}
+	}
+
+	return availableNodes
+}
+
+// getNewBlocks 获取新的区块（从上次处理的索引之后）
+func (r *Raft) getNewBlocks(lastProcessedIndex int) []bc.Block {
+	var newBlocks []bc.Block
+
+	allBlocks := bc.GetAllBlocks()
+	for _, block := range allBlocks {
+		if block.Index > lastProcessedIndex {
+			newBlocks = append(newBlocks, block)
+		}
+	}
+
+	return newBlocks
+}
+
+// distributeBlock 分发区块到不同节点
+func (r *Raft) distributeBlock(block bc.Block, availableNodes []*network.Node, anchorNodeID string) {
+	// 使用一致性哈希选择目标节点
+	targetNodeID, err := hash.GetNode(block.Hash)
+	if err != nil {
+		// 如果一致性哈希失败，使用负载均衡策略
+		targetNodeID = r.selectNodeByLoadBalance(availableNodes)
+	}
+
+	// 存储区块到目标节点
+	storage.StoreBlock(targetNodeID, &block)
+
+	// 增加锚节点的贡献值
+	service.AddContribution(anchorNodeID, 10.0)
+
+	// 增加目标节点的贡献值
+	service.AddContribution(targetNodeID, 5.0)
+
+	log.Printf("[锚节点分发] 区块 %d (哈希: %s) 分发至节点 %s",
+		block.Index, block.Hash[:8], targetNodeID)
+}
+
+// selectNodeByLoadBalance 使用负载均衡策略选择节点
+func (r *Raft) selectNodeByLoadBalance(nodes []*network.Node) string {
+	if len(nodes) == 0 {
+		return ""
+	}
+
+	// 按分数排序，优先选择分数高的节点
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Score > nodes[j].Score
+	})
+
+	// 使用加权随机选择，分数越高的节点被选中的概率越大
+	totalScore := 0.0
+	for _, node := range nodes {
+		totalScore += node.Score
+	}
+
+	if totalScore == 0 {
+		// 如果所有节点分数都为0，随机选择
+		return nodes[rand.Intn(len(nodes))].ID
+	}
+
+	// 加权随机选择
+	randomValue := rand.Float64() * totalScore
+	currentSum := 0.0
+
+	for _, node := range nodes {
+		currentSum += node.Score
+		if randomValue <= currentSum {
+			return node.ID
+		}
+	}
+
+	// 兜底选择
+	return nodes[0].ID
 }
 
 func (r *Raft) AddContribution(nodeID string, contribution float64) {
@@ -65,10 +169,5 @@ func (r *Raft) AddContribution(nodeID string, contribution float64) {
 		return
 	}
 
-	n := GetNodeByID(nodeID)
-	if n == nil {
-		return
-	}
-
-	n.Contribution += contribution
+	service.AddContribution(nodeID, contribution)
 }
