@@ -1,23 +1,22 @@
 package main
 
 import (
-	"blockchain/api/handler"
 	"blockchain/global"
 	bc "blockchain/internal/blockchain"
 	"blockchain/internal/consensus"
 	"blockchain/internal/hash"
 	"blockchain/internal/network"
-	"blockchain/internal/storage"
-	"blockchain/web"
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"time"
 )
 
 func main() {
 	rand.NewSource(time.Now().UnixNano())
+
+	// 初始化全局区块分配通道
+	global.BlockAssignChan = make(chan network.BlockAssignInfo, 100)
 
 	// 创建区块链
 	blockchain := bc.NewBlockchain()
@@ -44,32 +43,38 @@ func main() {
 	close(stopM)
 	log.Println("[矿工监听器] 停止矿工监听")
 
-	// 创建初始节点并启动锚节点监听器
-	initializeNodes()
-
 	// 打印区块链信息
 	fmt.Println("\n区块链状态:")
 	blockchain.PrintBlockchain()
 
-	nodeController := handler.NewNodeController()
+	//nodeController := handler.NewNodeController()
 
-	log.Println("服务启动: http://localhost:8080")
+	//log.Println("服务启动: http://localhost:8080")
 
-	http.HandleFunc("/add", nodeController.HandleAddNode)
-	http.HandleFunc("/store", storage.HandleStoreData)
-	http.HandleFunc("/list", nodeController.HandleListNodes)
-	http.HandleFunc("/query", nodeController.HandleQueryNode)
+	// 创建初始节点并启动锚节点监听器
+	initializeNodes()
 
-	web.StartWebServer()
+	//http.HandleFunc("/add", nodeController.HandleAddNode)
+	//http.HandleFunc("/store", storage.HandleStoreData)
+	//http.HandleFunc("/list", nodeController.HandleListNodes)
+	//http.HandleFunc("/query", nodeController.HandleQueryNode)
+	//
+	//web.StartWebServer()
 
-	_ = http.ListenAndServe(":8080", nil)
+	//_ = http.ListenAndServe(":8080", nil)
+
+	for {
+		time.Sleep(10 * time.Second) // 模拟持续运行
+		log.Println("系统运行中...")
+	}
 }
 
 // initializeNodes 初始化节点并启动锚节点监听器
 func initializeNodes() {
 	// 创建初始节点
-	initialNodes := []string{"node1", "node2", "node3", "node4", "node5", "node6", "node7", "node8", "node9", "node10"}
+	//initialNodes := []string{"node1", "node2", "node3", "node4", "node5", "node6", "node7", "node8", "node9", "node10"}
 
+	initialNodes := []string{"node1", "node2", "node3", "node4", "node5"}
 	for _, nodeID := range initialNodes {
 		node := network.NewNode(nodeID)
 		node.CalculateScore(node)
@@ -77,6 +82,8 @@ func initializeNodes() {
 		// 添加到全局节点映射
 		global.NodesMap[nodeID] = node
 		hash.AddNode(nodeID)
+		// 启动每个节点监听分配通道
+		go node.ListenBlockAssign(global.BlockAssignChan)
 	}
 
 	// 创建Raft实例并选举锚节点
@@ -89,7 +96,7 @@ func initializeNodes() {
 	anchor := rf.ElectAnchor(nodes)
 	if anchor != nil {
 		log.Printf("[初始化] 锚节点 %s 已选举，开始监听区块池", anchor.ID)
-		rf.StartAnchorListener(anchor.ID)
+		rf.StartAnchorListener(anchor.ID, global.BlockAssignChan)
 	}
 
 	global.AnchorNode = anchor

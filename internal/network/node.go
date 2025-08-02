@@ -2,6 +2,9 @@ package network
 
 import (
 	"fmt"
+
+	"blockchain/internal/blockchain"
+
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
@@ -20,6 +23,12 @@ type Node struct {
 	Address      string
 	NodeBlockMap map[string][]string
 	LastHealth   HealthStatus // 新增健康状态记录
+}
+
+// BlockAssignInfo 用于锚节点分配区块时在通道中传递的信息
+type BlockAssignInfo struct {
+	Block        block_chain.Block
+	TargetNodeID string
 }
 
 // 更新NewNode函数
@@ -80,6 +89,23 @@ func (n *Node) RemoveBlock(blockID string, blockSizeGB float64) {
 	if _, exists := n.NodeBlockMap[blockID]; exists {
 		delete(n.NodeBlockMap, blockID)
 		n.Disk += blockSizeGB
+	}
+}
+
+// ListenBlockAssign 监听锚节点分配的区块信息
+func (n *Node) ListenBlockAssign(assignChan chan BlockAssignInfo) {
+	for info := range assignChan {
+		if info.TargetNodeID == n.ID {
+			fmt.Printf("[节点 %s] 收到锚节点分配区块: 区块索引=%d, 哈希=%s\n", n.ID, info.Block.Index, info.Block.Hash)
+			// 假设每笔交易0.01GB，计算区块大小
+			blockSizeGB := float64(len(info.Block.Transactions)) * 0.01
+			err := n.StoreBlock(info.Block.Hash, blockSizeGB)
+			if err != nil {
+				fmt.Printf("[节点 %s] 存储区块失败: %v\n", n.ID, err)
+			} else {
+				fmt.Printf("[节点 %s] 成功存储区块，扣减磁盘 %.2fGB，剩余磁盘 %.2fGB\n", n.ID, blockSizeGB, n.Disk)
+			}
+		}
 	}
 }
 

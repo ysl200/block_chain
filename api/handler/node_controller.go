@@ -45,7 +45,7 @@ func (n *NodeController) HandleAddNode(w http.ResponseWriter, r *http.Request) {
 
 	// 启动锚节点监听器
 	if anchor != nil {
-		rf.StartAnchorListener(anchor.ID)
+		rf.StartAnchorListener(anchor.ID, global.BlockAssignChan)
 	}
 }
 

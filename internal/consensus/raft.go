@@ -40,7 +40,7 @@ func (r *Raft) ElectAnchor(nodes []*network.Node) *network.Node {
 }
 
 // StartAnchorListener 启动锚节点监听器，监听区块池并分发区块
-func (r *Raft) StartAnchorListener(nodeID string) {
+func (r *Raft) StartAnchorListener(nodeID string, assignChan chan network.BlockAssignInfo) {
 	go func() {
 		log.Printf("[锚节点监听器] 节点 %s 开始监听区块池...", nodeID)
 
@@ -69,7 +69,7 @@ func (r *Raft) StartAnchorListener(nodeID string) {
 
 			// 分发新区块
 			for _, block := range newBlocks {
-				r.distributeBlock(block, availableNodes, nodeID)
+				r.distributeBlock(block, availableNodes, nodeID, assignChan)
 				lastProcessedIndex = block.Index
 			}
 
@@ -105,8 +105,8 @@ func (r *Raft) getNewBlocks(lastProcessedIndex int) []bc.Block {
 	return newBlocks
 }
 
-// distributeBlock 分发区块到不同节点
-func (r *Raft) distributeBlock(block bc.Block, availableNodes []*network.Node, anchorNodeID string) {
+// distributeBlock 分发区块到不同节点，并通过通道广播分配信息
+func (r *Raft) distributeBlock(block bc.Block, availableNodes []*network.Node, anchorNodeID string, assignChan chan network.BlockAssignInfo) {
 	// 使用一致性哈希选择目标节点
 	targetNodeID, err := hash.GetNode(block.Hash)
 	if err != nil {
@@ -128,6 +128,12 @@ func (r *Raft) distributeBlock(block bc.Block, availableNodes []*network.Node, a
 
 	log.Printf("[锚节点分发] 区块 %d (哈希: %s) 分发至节点 %s",
 		block.Index, block.Hash[:8], targetNodeID)
+
+	// 通过通道广播分配信息
+	assignChan <- network.BlockAssignInfo{
+		Block:        block,
+		TargetNodeID: targetNodeID,
+	}
 }
 
 // selectNodeByLoadBalance 使用负载均衡策略选择节点
